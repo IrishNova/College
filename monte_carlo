@@ -1,0 +1,108 @@
+import yfinance as yf
+import numpy as np
+from matplotlib import pyplot as plt
+
+
+def data_fetch(ticks):
+    """
+    Fetches and preps data
+    :param ticks: list of tickers
+    :return: Pandas series of mean returns, Pandas DataFrame of covariance matrix
+    """
+    temp = {}       # Where our returns will be deposited after calculated within the for loop
+    for tick in ticks:      # Loops through the tickers
+        f = yf.Ticker(tick)     # Yahoo finance data setup
+        d = f.history(period='30y', interval="3mo")        # Fetches 30 years of data at 3 month intervals
+        roi = d['Close'].pct_change().dropna()      # Calculates the percentage change
+        temp[tick] = roi        # Adds these to the dict above with the key as the ticker
+
+    df = pd.DataFrame(temp)    # Turns dict into Pandas Dataframe so it's easy to use
+    mean_roi = df.mean()        # Calculates mean of returns for each ticker
+    covar_roi = df.cov()        # Calculates the covariance for each price move
+
+    return mean_roi, covar_roi
+
+
+def monte_carlo_sim(sims, perds, m_rets, covar, w, initial_val):
+    """
+    Runs the full monte carlo simulation
+    :param sims: Number of simulations
+    :param perds: how many periods in the future the projection will run
+    :param m_rets: mean roi
+    :param covar: covariance of returns
+    :param w: wieghts for each component
+    :param initial_val: starting portfolio value
+    :return: numpy array
+    """
+    mean_matrix = np.full(shape=(perds, len(w)), fill_value=m_rets)     # Sets up empty array
+    mean_matrix = mean_matrix.T     # Transposes the matrix so this will work
+
+    port_sims = np.full(shape=(perds, sims), fill_value=0.0)
+
+    for m in range(0, sims):        # Runs each simulation
+        ze = np.random.normal(size=(perds, len(w)))
+        low = np.linalg.cholesky(covar)
+        quarter_returns = mean_matrix + np.inner(low, ze)
+        port_sims[:, m] = np.cumprod(np.inner(w, quarter_returns.T)+1)*initial_val
+
+    return port_sims
+
+
+def graphing(sd, titl):
+    plt.plot(sd)
+    plt.ylabel('Returns in Dollars (in millions)')
+    plt.xlabel('Quarters in the future')
+    plt.title(titl)
+    plt.show()
+
+
+if __name__ == '__main__':
+
+    '''Portfolio details'''
+    name = 'Cyclical Stocks'
+    tickers = 'RCD', 'VCR', 'XHB'     # Tickers
+    weights = .34, .33, .33    #.20, .20, .20, .20, .20    # Weights of components
+    port_val = 345000       # Starting Value of portfolio
+
+    '''Monte Carlo sim deets'''
+    m_sims = 100            # Number of simulations to be run
+    periods = 4 * 20        # Data's collected per quarter, my IPS is 20 years
+
+    m, c = data_fetch(tickers)
+
+    d = monte_carlo_sim(m_sims, periods, m, c, weights, port_val)
+
+
+
+    print("Information for {}".format(name))
+    print("Expected Return ${:,.2f}".format(d.mean()))
+    print("STD ${:,.2f}".format(d.std()))
+    print("This model used {} simulations to determine the results".format(m_sims))
+
+    cgar = (((d.mean()+(1 * d.std()))/ port_val)**(1/20))-1
+    print("There is a 34% chance of a {:.2f}% annual growth rate".format(cgar * 100))
+    cgar = (((d.mean()+(2 * d.std()))/ port_val)**(1/20))-1
+    print("There is a 47.5% chance of a {:.2f}% annual growth rate".format(cgar * 100))
+
+    graphing(d, name)
+
+""" Tickers used for modeling"""
+
+# name = "Cash"
+# cash = 'BIL', 'SGOV'
+# weighs = .5, .5
+
+# name = 'Consumer Defensive'
+# consumer_defensive = 'WMT', 'PG', 'UL', 'PM', 'GIS'
+# weights = .20, .20, .20, .20, .20
+
+# name = 'Growth Stocks'
+# growth_stocks = 'CVX', 'PFE', 'AMAT', 'F', 'CNQ'
+
+# name = 'Cyclical Stocks'
+# tickers = 'RCD', 'VCR', 'XHB'  # Tickers
+# weights = .34, .33, .33
+
+# name = 'Tax-Free Munis'
+# tickers = 'MANKX', 'MACMX', 'VTEB'  # Tickers
+# weights = .34, .33, .33
