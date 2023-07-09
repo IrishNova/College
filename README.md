@@ -1,2 +1,2 @@
 # College
-All the files created whilst at school
+All the files created while at school
